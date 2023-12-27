@@ -24,6 +24,7 @@ import org.freeswitch.esl.client.transport.message.EslHeaders.Name;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -178,22 +179,28 @@ public class EslFrameDecoder extends ReplayingDecoder<EslFrameDecoder.State> {
 	}
 
 	private String readLine(ByteBuf buffer, int maxLineLength) throws TooLongFrameException {
-		StringBuilder sb = new StringBuilder(64);
-		while (buffer.isReadable()) {
-			// this read should always succeed
-			byte nextByte = buffer.readByte();
-			if (nextByte == LF) {
-				return sb.toString();
-			} else {
-				// Abort decoding if the decoded line is too large.
-				if (sb.length() >= maxLineLength) {
-					throw new TooLongFrameException(
-						"ESL message line is longer than " + maxLineLength + " bytes.");
-				}
-				sb.append((char) nextByte);
-			}
+		if (!buffer.isReadable()) return "";
+		// this read should always succeed
+		int length = buffer.bytesBefore(LF);
+		if (length == 0) {
+			//SKIP LF
+			buffer.readByte();
+			return "";
+		}
+		if (length >= maxLineLength) {
+			throw new TooLongFrameException(
+					"ESL message line is longer than " + maxLineLength + " bytes.");
 		}
 
-		return sb.toString();
+		int size = length == -1 ? buffer.readableBytes() : length;
+		byte[] bytes = new byte[size];
+		buffer.readBytes(bytes, 0, size);
+
+		//skip LF if exists
+		if (length != -1){
+			buffer.readByte();
+		}
+
+		return new String(bytes);
 	}
 }
